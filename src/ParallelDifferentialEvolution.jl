@@ -11,7 +11,13 @@ function nullcb(gen, x, im, f, con, etime)
 end
 
 function logcb(gen, x, im, f, con, etime)
-    @info "generation: $gen; convergence: $con; elapsed time: $etime" x[im], f[im], mean(f), std(f)
+    @info """Generation: $gen
+    \tConvergence: $con
+    \tElapsed time: $etime
+    \tBest x: $(x[im])
+    \tBest f: $(f[im])
+    \tmean(f): $(mean(f))
+    \tstd(f): $(std(f))"""
     flush(stdout)
     flush(stderr)
 end
@@ -31,9 +37,13 @@ end
 function diffevo(fo, d; F=0.8, CR=0.6, np=d*10,
                  maxiter=1000, rtol=1e-3, atol=1e-14, cb=nullcb, fmap=map,
                  seeds=nothing)
+    @info "Making initial seed from latin hypercube..."
     plan, _ = LatinHypercubeSampling.LHCoptim(np, d, 1000)
-    plan = LatinHypercubeSampling.scaleLHC(plan, repeat([(0.0,1.0)], d))
+    plan = LatinHypercubeSampling.scaleLHC(plan, repeat([(0.0, 1.0)], d))
     x = mapslices(x->[x], plan, dims=2)
+    @info "...initial seed done."
+    flush(stdout)
+    flush(stderr)
     if !isnothing(seeds)
         for (i,seed) in enumerate(seeds)
             x[i] = seed
@@ -57,7 +67,14 @@ function diffevo(fo, d; F=0.8, CR=0.6, np=d*10,
             end
             trials[j] = ifelse.(cp, mut, x[j])
         end
-        tf = fmap(fo, trials)
+        tf = try
+            fmap(fo, trials)
+        catch e
+            bt = catch_backtrace()
+            msg = "Error in pmap:\n"*sprint(showerror, e, bt)
+            @warn msg
+            throw(e)
+        end
         for j in 1:np
             if tf[j] < f[j]
                 f[j] = tf[j]
